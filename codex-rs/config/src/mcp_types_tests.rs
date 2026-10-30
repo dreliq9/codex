@@ -245,6 +245,49 @@ fn deserialize_disabled_server_config() {
 }
 
 #[test]
+fn subagent_mcp_opt_out_round_trips() {
+    let cfg: McpServerConfig = toml::from_str(
+        r#"
+            command = "heavy-mcp"
+            enabled_in_subagents = false
+        "#,
+    )
+    .expect("deserialize a server scoped to the parent chat");
+
+    let serialized = toml::Value::try_from(&cfg).expect("serialize server config");
+    assert_eq!(
+        serialized.get("enabled_in_subagents"),
+        Some(&toml::Value::Boolean(false))
+    );
+    assert!(
+        cfg.enabled,
+        "opting out of workers must keep the parent enabled"
+    );
+}
+
+#[test]
+fn subagent_mcp_inheritance_defaults_to_existing_behavior() {
+    for transport in [r#"command = "echo""#, r#"url = "https://example.com/mcp""#] {
+        let cfg: McpServerConfig = toml::from_str(transport).expect("server config");
+        assert!(cfg.enabled_in_subagents);
+        let serialized = toml::Value::try_from(&cfg).expect("serialize config");
+        assert!(serialized.get("enabled_in_subagents").is_none());
+        assert_eq!(
+            toml::from_str::<McpServerConfig>(&toml::to_string(&cfg).unwrap()).unwrap(),
+            cfg
+        );
+    }
+}
+
+#[test]
+fn subagent_mcp_scope_rejects_non_boolean_values() {
+    assert!(
+        toml::from_str::<McpServerConfig>("command = \"echo\"\nenabled_in_subagents = \"false\"")
+            .is_err()
+    );
+}
+
+#[test]
 fn deserialize_required_server_config() {
     let cfg: McpServerConfig = toml::from_str(
         r#"
@@ -639,6 +682,7 @@ fn deserialize_ignores_unknown_server_fields() {
             },
             environment_id: crate::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
+            enabled_in_subagents: true,
             required: false,
             startup_readiness: Default::default(),
             supports_parallel_tool_calls: false,

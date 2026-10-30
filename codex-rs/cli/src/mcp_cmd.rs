@@ -419,6 +419,7 @@ async fn run_add(config: &Config, add_args: AddArgs) -> Result<()> {
         transport: transport.clone(),
         environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
+        enabled_in_subagents: true,
         required: false,
         startup_readiness: Default::default(),
         supports_parallel_tool_calls: false,

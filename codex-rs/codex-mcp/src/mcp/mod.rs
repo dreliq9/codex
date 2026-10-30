@@ -692,6 +692,7 @@ fn mcp_server_config_for_url(
         auth: auth_mode,
         environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
+        enabled_in_subagents: true,
         required: false,
         startup_readiness: Default::default(),
         supports_parallel_tool_calls: false,

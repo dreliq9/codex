@@ -311,6 +311,9 @@ impl Session {
             plugins_available,
             selected_plugins: _,
         } = mcp_projection;
+        config.mcp_server_catalog = config
+            .mcp_server_catalog
+            .for_session_source(&desired.session_source);
         config.approval_policy = desired.config.permissions.approval_policy.clone();
         config.permission_profile = desired.config.permissions.effective_permission_profile();
         config.approvals_reviewer = desired.config.approvals_reviewer;

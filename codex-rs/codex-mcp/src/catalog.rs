@@ -546,7 +546,11 @@ impl McpCatalogBuilder {
                                     disabled_server_names.insert(name.clone());
                                 }
                             }
-                            Some(McpServerDisabledReason::Unknown) | None => {
+                            Some(
+                                McpServerDisabledReason::Unknown
+                                | McpServerDisabledReason::Subagent,
+                            )
+                            | None => {
                                 disabled_server_names.insert(name.clone());
                             }
                         }
@@ -638,6 +642,24 @@ pub struct ResolvedMcpCatalog {
 }
 
 impl ResolvedMcpCatalog {
+    /// Projects worker-scoped opt-outs without changing the parent catalog or its clients.
+    pub fn for_session_source(&self, source: &codex_protocol::protocol::SessionSource) -> Self {
+        if !matches!(source, codex_protocol::protocol::SessionSource::SubAgent(_)) {
+            return self.clone();
+        }
+        let mut builder = self.to_builder();
+        for action in &mut builder.actions {
+            if let CatalogAction::Register(registration) = action {
+                let server = &mut registration.config;
+                if server.enabled && !server.enabled_in_subagents {
+                    server.enabled = false;
+                    server.disabled_reason = Some(McpServerDisabledReason::Subagent);
+                }
+            }
+        }
+        builder.build()
+    }
+
     pub fn builder() -> McpCatalogBuilder {
         McpCatalogBuilder::default()
     }

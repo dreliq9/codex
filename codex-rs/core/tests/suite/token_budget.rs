@@ -781,6 +781,7 @@ async fn token_budget_context_injects_plain_thread_hint_text(cached_subagent: bo
                     },
                     environment_id: "local".to_string(),
                     enabled: true,
+                    enabled_in_subagents: true,
                     required: false,
                     startup_readiness: Default::default(),
                     supports_parallel_tool_calls: false,

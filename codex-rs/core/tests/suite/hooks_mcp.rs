@@ -302,6 +302,7 @@ fn insert_rmcp_test_server(
             },
             environment_id,
             enabled: true,
+            enabled_in_subagents: true,
             required: false,
             startup_readiness: Default::default(),
             supports_parallel_tool_calls: false,

@@ -60,6 +60,8 @@ impl AppToolApproval {
 pub enum McpServerDisabledReason {
     /// The server is disabled, but there is no more specific user-facing reason.
     Unknown,
+    /// The server is intentionally available only outside subagent sessions.
+    Subagent,
     /// The server was disabled by config requirements from the given source.
     Requirements { source: RequirementSource },
     /// An explicit disable is also denied by requirements.
@@ -70,6 +72,7 @@ impl fmt::Display for McpServerDisabledReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             McpServerDisabledReason::Unknown => write!(f, "unknown"),
+            McpServerDisabledReason::Subagent => write!(f, "disabled in subagents"),
             McpServerDisabledReason::Requirements { source }
             | McpServerDisabledReason::ExplicitAndRequirements { source } => {
                 write!(f, "requirements ({source})")
@@ -244,6 +247,10 @@ pub struct McpServerConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
 
+    /// When false, keep this server available in the parent but do not start or expose it in subagents.
+    #[serde(default = "default_enabled", skip_serializing_if = "is_enabled")]
+    pub enabled_in_subagents: bool,
+
     /// When `true`, `codex exec` exits with an error if this MCP server fails to initialize.
     /// With `startup_readiness = "catalog"`, a valid cached catalog can satisfy startup;
     /// connection failures are then reported when a tool is invoked.
@@ -318,6 +325,7 @@ impl McpServerConfig {
     pub fn disable_by_requirements(&mut self, source: RequirementSource) {
         let explicitly_disabled = match self.disabled_reason {
             Some(McpServerDisabledReason::Requirements { .. }) => false,
+            Some(McpServerDisabledReason::Subagent) => false,
             Some(McpServerDisabledReason::ExplicitAndRequirements { .. }) => true,
             Some(McpServerDisabledReason::Unknown) | None => !self.enabled,
         };
@@ -424,6 +432,9 @@ pub struct RawMcpServerConfig {
     pub tool_timeout_sec: Option<Duration>,
     #[serde(default)]
     pub enabled: Option<bool>,
+    /// When false, keep this server available in the parent but do not start or expose it in subagents.
+    #[serde(default)]
+    pub enabled_in_subagents: Option<bool>,
     #[serde(default)]
     pub required: Option<bool>,
     /// Whether startup requires a live connection or can use a valid cached tool catalog.
@@ -480,6 +491,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             startup_timeout_ms,
             tool_timeout_sec,
             enabled,
+            enabled_in_subagents,
             required,
             startup_readiness,
             supports_parallel_tool_calls,
@@ -615,6 +627,7 @@ impl TryFrom<RawMcpServerConfig> for McpServerConfig {
             startup_timeout_sec,
             tool_timeout_sec,
             enabled: enabled.unwrap_or_else(default_enabled),
+            enabled_in_subagents: enabled_in_subagents.unwrap_or_else(default_enabled),
             required: required.unwrap_or_default(),
             startup_readiness: startup_readiness.unwrap_or_default(),
             supports_parallel_tool_calls: supports_parallel_tool_calls.unwrap_or_default(),
@@ -645,6 +658,10 @@ impl<'de> Deserialize<'de> for McpServerConfig {
 
 const fn default_enabled() -> bool {
     true
+}
+
+fn is_enabled(value: &bool) -> bool {
+    *value
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema)]

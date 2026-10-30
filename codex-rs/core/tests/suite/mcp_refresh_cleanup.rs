@@ -149,6 +149,7 @@ async fn refresh_keeps_superseded_mcp_server_alive_for_in_flight_calls() -> anyh
                     },
                     environment_id: DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
                     enabled: true,
+                    enabled_in_subagents: true,
                     required: false,
                     startup_readiness: Default::default(),
                     supports_parallel_tool_calls: false,

@@ -384,6 +384,7 @@ fn insert_mcp_server(
             auth: options.auth,
             environment_id: options.environment_id,
             enabled: true,
+            enabled_in_subagents: true,
             required: false,
             startup_readiness: Default::default(),
             supports_parallel_tool_calls: options.supports_parallel_tool_calls,

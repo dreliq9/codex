@@ -4015,6 +4015,11 @@
           "default": null,
           "type": "boolean"
         },
+        "enabled_in_subagents": {
+          "default": null,
+          "description": "When false, keep this server available in the parent but do not start or expose it in subagents.",
+          "type": "boolean"
+        },
         "enabled_tools": {
           "default": null,
           "items": {

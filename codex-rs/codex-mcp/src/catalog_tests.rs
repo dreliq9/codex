@@ -39,6 +39,7 @@ fn server(url: &str) -> McpServerConfig {
         },
         environment_id: DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
+        enabled_in_subagents: true,
         required: true,
         startup_readiness: Default::default(),
         supports_parallel_tool_calls: true,
@@ -84,6 +85,122 @@ fn extension_source(id: &str) -> McpServerSource {
         id: id.to_string(),
         host_owned_apps: false,
     }
+}
+
+#[test]
+fn subagent_scope_preserves_parent_and_default_inheritance() {
+    use codex_config::McpServerDisabledReason;
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+
+    let mut heavy = server("https://heavy.example/mcp");
+    heavy.enabled_in_subagents = false;
+    let ordinary = server("https://ordinary.example/mcp");
+    let mut disabled = server("https://disabled.example/mcp");
+    disabled.enabled = false;
+    disabled.enabled_in_subagents = false;
+    let mut builder = ResolvedMcpCatalog::builder();
+    for (name, config) in [
+        ("heavy", heavy),
+        ("ordinary", ordinary),
+        ("disabled", disabled),
+    ] {
+        builder.register(McpServerRegistration::from_config(name.to_string(), config));
+    }
+    let parent = builder.build();
+    let worker = parent.for_session_source(&SessionSource::SubAgent(SubAgentSource::Review));
+
+    assert!(parent.server("heavy").unwrap().config().enabled);
+    assert!(!worker.server("heavy").unwrap().config().enabled);
+    assert_eq!(
+        worker.server("heavy").unwrap().config().disabled_reason,
+        Some(McpServerDisabledReason::Subagent)
+    );
+    assert!(worker.server("ordinary").unwrap().config().enabled);
+    assert!(!worker.server("disabled").unwrap().config().enabled);
+    assert!(worker.has_same_servers(
+        &worker.for_session_source(&SessionSource::SubAgent(SubAgentSource::Review))
+    ));
+    for source in [SessionSource::Cli, SessionSource::VSCode] {
+        assert!(parent.has_same_servers(&parent.for_session_source(&source)));
+    }
+}
+
+#[test]
+fn subagent_scope_preserves_conflicts_and_plugin_sources() {
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+    let mut builder = ResolvedMcpCatalog::builder();
+    for url in ["https://first.example/mcp", "https://second.example/mcp"] {
+        let mut config = server(url);
+        config.enabled_in_subagents = false;
+        builder.register(McpServerRegistration::from_config(
+            "duplicate".into(),
+            config,
+        ));
+    }
+    let mut config = server("https://plugin.example/mcp");
+    config.enabled_in_subagents = false;
+    builder.register(McpServerRegistration::from_selected_plugin(
+        "plugin".into(),
+        plugin("scoped@test"),
+        0,
+        DEFAULT_MCP_SERVER_ENVIRONMENT_ID,
+        config,
+    ));
+    let parent = builder.build();
+    let worker = parent.for_session_source(&SessionSource::SubAgent(SubAgentSource::Review));
+    assert!(!parent.conflicts().is_empty());
+    assert_eq!(worker.conflicts(), parent.conflicts());
+    assert_eq!(
+        worker.server("plugin").unwrap().source(),
+        parent.server("plugin").unwrap().source()
+    );
+    assert!(!worker.server("plugin").unwrap().config().enabled);
+    assert!(
+        !worker
+            .to_builder()
+            .build()
+            .server("plugin")
+            .unwrap()
+            .config()
+            .enabled
+    );
+}
+
+#[test]
+fn subagent_scope_preserves_existing_requirements_denial_and_executor_authority() {
+    use codex_config::McpServerDisabledReason;
+    use codex_config::RequirementSource;
+    use codex_protocol::protocol::SessionSource;
+    use codex_protocol::protocol::SubAgentSource;
+
+    let mut executor = server("https://executor.example/mcp");
+    executor.enabled_in_subagents = false;
+    let mut denied = server("https://denied.example/mcp");
+    denied.enabled_in_subagents = false;
+    denied.disable_by_requirements(RequirementSource::Unknown);
+    let mut builder = ResolvedMcpCatalog::builder();
+    builder.register(McpServerRegistration::from_executor_config(
+        "executor".into(),
+        executor,
+    ));
+    builder.register(McpServerRegistration::from_config(
+        "denied".into(),
+        denied.clone(),
+    ));
+    let parent = builder.build();
+    let worker = parent.for_session_source(&SessionSource::SubAgent(SubAgentSource::Review));
+
+    assert_eq!(worker.server("denied").unwrap().config(), &denied);
+    assert_eq!(
+        worker.server("executor").unwrap().credential_policy(),
+        McpCredentialPolicy::ExecutorOnly
+    );
+    assert_eq!(
+        worker.server("executor").unwrap().config().disabled_reason,
+        Some(McpServerDisabledReason::Subagent)
+    );
 }
 
 fn register(source: McpServerSource) -> McpServerConflictAction {

@@ -7,6 +7,9 @@
 //! the thread becomes untracked.
 
 mod status;
+#[cfg(test)]
+#[path = "runtime/worker_scope_tests.rs"]
+mod worker_scope_tests;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -1066,6 +1069,7 @@ mod tests {
             },
             environment_id: environment_id.to_string(),
             enabled: true,
+            enabled_in_subagents: true,
             required: false,
             startup_readiness: Default::default(),
             supports_parallel_tool_calls: false,
