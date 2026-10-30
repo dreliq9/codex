@@ -1,12 +1,13 @@
 """Disposable stdio fixture. No application configuration, auth, network, or hardware."""
+
 import atexit
 import ctypes
 import json
 import os
-from pathlib import Path
 import sys
 import threading
 import time
+from pathlib import Path
 
 
 def identity(pid):
@@ -71,14 +72,26 @@ for line in sys.stdin:
         continue
     method = request["method"]
     if method == "initialize":
-        result = {"protocolVersion": request["params"]["protocolVersion"],
-                  "capabilities": {"tools": {}},
-                  "serverInfo": {"name": "worker-scope-fixture", "version": "1"}}
+        result = {
+            "protocolVersion": request["params"]["protocolVersion"],
+            "capabilities": {"tools": {}},
+            "serverInfo": {"name": "worker-scope-fixture", "version": "1"},
+        }
     elif method == "tools/list":
-        result = {"tools": [{"name": "whoami", "description": "Return fixture identity",
-                             "inputSchema": {"type": "object", "properties": {}}}]}
+        result = {
+            "tools": [
+                {
+                    "name": "whoami",
+                    "description": "Return fixture identity",
+                    "inputSchema": {"type": "object", "properties": {}},
+                }
+            ]
+        }
     elif method == "tools/call":
         result = {"content": [{"type": "text", "text": json.dumps(instance)}]}
     else:
         result = {}
-    print(json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}), flush=True)
+    print(
+        json.dumps({"jsonrpc": "2.0", "id": request["id"], "result": result}),
+        flush=True,
+    )

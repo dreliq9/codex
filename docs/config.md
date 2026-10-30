@@ -6,6 +6,9 @@ For advanced configuration instructions, see [this documentation](https://develo
 
 For a full configuration reference, see [this documentation](https://developers.openai.com/codex/config-reference).
 
+For this branch's `mcp_servers.<name>.enabled_in_subagents` option and validation
+instructions, see [MCP inheritance for subagents](mcp-worker-inheritance.md).
+
 ## Lifecycle hooks
 
 Admins can set top-level `allow_managed_hooks_only = true` in
