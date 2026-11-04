@@ -15,6 +15,93 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
 
+fn node_repl_transport_refresh() -> JsonValue {
+    serde_json::json!({
+        "command": "C:/new-runtime/node_repl.exe",
+        "args": [],
+        "env": { "NODE_REPL_NODE_PATH": "C:/new-runtime/node.exe" },
+        "startup_timeout_sec": 120,
+    })
+}
+
+#[tokio::test]
+async fn node_repl_refresh_preserves_explicit_worker_policy() -> Result<()> {
+    for policy in [false, true] {
+        let tmp = tempdir()?;
+        let path = tmp.path().join(CONFIG_TOML_FILE);
+        std::fs::write(
+            &path,
+            format!(
+                "hide_agent_reasoning = true\n[mcp_servers.node_repl]\ncommand = 'old'\n\
+                 enabled_in_subagents = {policy}\n[mcp_servers.node_repl.env]\nSTALE = 'old'\n"
+            ),
+        )?;
+        let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
+        service
+            .batch_write(ConfigBatchWriteParams {
+                edits: vec![codex_app_server_protocol::ConfigEdit {
+                    key_path: "mcp_servers.node_repl".into(),
+                    value: node_repl_transport_refresh(),
+                    merge_strategy: MergeStrategy::Replace,
+                }],
+                file_path: None,
+                expected_version: None,
+                reload_user_config: false,
+            })
+            .await?;
+        let saved: TomlValue = toml::from_str(&std::fs::read_to_string(path)?)?;
+        assert_eq!(saved["hide_agent_reasoning"].as_bool(), Some(true));
+        let server = &saved["mcp_servers"]["node_repl"];
+        assert_eq!(server["enabled_in_subagents"].as_bool(), Some(policy));
+        assert_eq!(
+            server["command"].as_str(),
+            Some("C:/new-runtime/node_repl.exe")
+        );
+        assert!(server["env"].get("STALE").is_none());
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn node_repl_refresh_respects_ordered_policy_edits() -> Result<()> {
+    for policy in [JsonValue::Bool(true), JsonValue::Null] {
+        let tmp = tempdir()?;
+        let path = tmp.path().join(CONFIG_TOML_FILE);
+        std::fs::write(
+            &path,
+            "[mcp_servers.node_repl]\ncommand = 'old'\nenabled_in_subagents = false\n",
+        )?;
+        let service = ConfigManager::without_managed_config_for_tests(tmp.path().to_path_buf());
+        service
+            .batch_write(ConfigBatchWriteParams {
+                edits: vec![
+                    codex_app_server_protocol::ConfigEdit {
+                        key_path: "mcp_servers.node_repl.enabled_in_subagents".into(),
+                        value: policy.clone(),
+                        merge_strategy: MergeStrategy::Replace,
+                    },
+                    codex_app_server_protocol::ConfigEdit {
+                        key_path: "mcp_servers.node_repl".into(),
+                        value: node_repl_transport_refresh(),
+                        merge_strategy: MergeStrategy::Replace,
+                    },
+                ],
+                file_path: None,
+                expected_version: None,
+                reload_user_config: false,
+            })
+            .await?;
+        let saved: TomlValue = toml::from_str(&std::fs::read_to_string(path)?)?;
+        assert_eq!(
+            saved["mcp_servers"]["node_repl"]
+                .get("enabled_in_subagents")
+                .and_then(TomlValue::as_bool),
+            policy.as_bool(),
+        );
+    }
+    Ok(())
+}
+
 #[test]
 fn provider_batch_remapping_preserves_ordered_edits() {
     let initial = serde_json::json!({

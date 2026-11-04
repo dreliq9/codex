@@ -315,13 +315,19 @@ impl ConfigManager {
                         || !has_broker_settings(&user_layer.config)
                             && has_broker_settings(&layers.effective_config())
                 };
-            let parsed_value = if preserves_network_proxy_settings {
+            let mut parsed_value = if preserves_network_proxy_settings {
                 Some(TomlValue::Boolean(false))
             } else {
                 parse_value(value).map_err(|message| {
                     ConfigManagerError::write(ConfigWriteErrorCode::ConfigValidationError, message)
                 })?
             };
+            preserve_node_repl_worker_policy(
+                &user_config,
+                &segments,
+                parsed_value.as_mut(),
+                &strategy,
+            );
             if matches!(strategy, MergeStrategy::Upsert)
                 && let Some(value) = parsed_value.as_ref()
                 && matches!(segments.as_slice(), [policy, ..] if policy == "shell_environment_policy")
@@ -608,6 +614,52 @@ fn credential_providers_path(segments: &[String]) -> Option<&[String]> {
             Some(&segments[..3])
         }
         _ => None,
+    }
+}
+
+/// Older desktops regenerate this transport without understanding the worker policy.
+/// Preserve an existing explicit policy only for that recognizable refresh. A caller
+/// can still set the policy explicitly, clear its exact key, or delete the server.
+fn preserve_node_repl_worker_policy(
+    config: &TomlValue,
+    segments: &[String],
+    replacement: Option<&mut TomlValue>,
+    strategy: &MergeStrategy,
+) {
+    if !matches!(strategy, MergeStrategy::Replace)
+        || !matches!(segments, [servers, name] if servers == "mcp_servers" && name == "node_repl")
+    {
+        return;
+    }
+    let Some(replacement) = replacement.and_then(TomlValue::as_table_mut) else {
+        return;
+    };
+    if replacement.contains_key("enabled_in_subagents") {
+        return;
+    }
+    let managed_transport = replacement
+        .get("command")
+        .and_then(TomlValue::as_str)
+        .and_then(|command| command.rsplit(['/', '\\']).next())
+        .is_some_and(|name| matches!(name, "node_repl" | "node_repl.exe"))
+        && replacement
+            .get("args")
+            .and_then(TomlValue::as_array)
+            .is_some_and(Vec::is_empty)
+        && replacement
+            .get("env")
+            .and_then(|env| env.get("NODE_REPL_NODE_PATH"))
+            .and_then(TomlValue::as_str)
+            .is_some_and(|path| !path.is_empty());
+    if managed_transport
+        && let Some(policy) = value_at_path(config, segments)
+            .and_then(|server| server.get("enabled_in_subagents"))
+            .and_then(TomlValue::as_bool)
+    {
+        replacement.insert(
+            "enabled_in_subagents".to_string(),
+            TomlValue::Boolean(policy),
+        );
     }
 }
 

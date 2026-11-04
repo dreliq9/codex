@@ -19,6 +19,15 @@ to a parent or another permitted execution path.
 The option requires this branch's backend. The unmodified
 `rust-v0.165.0-alpha.1.2` release ignores the new field.
 
+Desktop updates can regenerate `mcp_servers.node_repl` with only its managed
+transport fields and `mergeStrategy: "replace"`. This backend retains an existing
+explicit `enabled_in_subagents` value for that recognizable native Node REPL
+refresh. Other replacement fields retain their normal semantics, including
+removing stale transport environment settings. An explicit incoming policy wins;
+clearing the exact policy key or deleting the server is still supported.
+This compatibility rule does not add an opt-out when none was configured, and
+does not apply to unrelated servers or custom Node REPL launchers.
+
 ## Build and isolated checks
 
 The base is release commit `720fec862a608ae1e5878d1eecb04fb93192e93c`.
@@ -70,6 +79,20 @@ provider, and never starts a model turn. It verifies configuration layering and
 parent process identity across a private MCP refresh, then checks cleanup.
 It never connects to an existing desktop backend. Do not commit local receipts
 containing machine paths.
+
+To check desktop transport refresh compatibility through a private backend:
+
+```sh
+python3 scripts/mcp_conformance/node_repl_refresh_regression.py \
+  codex-rs/target/debug/codex --report /tmp/node-refresh.json
+```
+
+This checks retained opt-outs and opt-ins, explicit edits and deletion, ordered
+batch edits, unrelated servers, custom launchers, and replacement of stale
+transport environment fields. It starts no model turn, chat worker, or MCP.
+Use `--baseline` against the earlier inheritance build to reproduce policy loss.
+The runner uses synthetic data; installed desktop code and private configuration
+are not needed or included.
 
 ## Recorded validation
 
