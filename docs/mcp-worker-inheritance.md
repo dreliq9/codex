@@ -19,6 +19,15 @@ to a parent or another permitted execution path.
 The option requires this branch's backend. The unmodified
 `rust-v0.165.0-alpha.1.2` release ignores the new field.
 
+Desktop updates can regenerate `mcp_servers.node_repl` with only its managed
+transport fields and `mergeStrategy: "replace"`. This backend retains an existing
+explicit `enabled_in_subagents` value for that recognizable native Node REPL
+refresh. Other replacement fields retain their normal semantics, including
+removing stale transport environment settings. An explicit incoming policy wins;
+clearing the exact policy key or deleting the server is still supported.
+This compatibility rule does not add an opt-out when none was configured, and
+does not apply to unrelated servers or custom Node REPL launchers.
+
 ## Build and isolated checks
 
 The base is release commit `720fec862a608ae1e5878d1eecb04fb93192e93c`.
@@ -71,6 +80,26 @@ parent process identity across a private MCP refresh, then checks cleanup.
 It never connects to an existing desktop backend. Do not commit local receipts
 containing machine paths.
 
+To check desktop transport refresh compatibility through a private backend:
+
+```sh
+python3 scripts/mcp_conformance/node_repl_refresh_regression.py \
+  codex-rs/target/debug/codex --report /tmp/node-refresh.json
+```
+
+This checks retained opt-outs and opt-ins, explicit edits and deletion, ordered
+batch edits, unrelated servers, custom launchers, and replacement of stale
+transport environment fields. It starts no model turn, chat worker, or MCP.
+Use `--baseline` against the earlier inheritance build to reproduce policy loss.
+The runner uses synthetic data; installed desktop code and private configuration
+are not needed or included.
+
+The focused native tests use the app-server library test target. From `codex-rs`:
+
+```sh
+cargo test --locked -p codex-app-server --lib config_manager_service::tests:: -- --test-threads=2
+```
+
 ## Recorded validation
 
 On Windows, 2026-10-30:
@@ -94,11 +123,52 @@ The release manifest and lockfile initially disagreed on 167 local workspace
 package version labels. A separate build-only commit reconciles those labels;
 third-party versions, sources, checksums and dependencies are unchanged.
 
+### Node REPL refresh follow-up, 2026-11-04
+
+The desktop startup initializer replaces the complete `mcp_servers.node_repl`
+table with a managed transport value that omits `enabled_in_subagents`. Replaying
+that replacement against inheritance commit
+`9d9da6891a912f5c5ae3e09097165a5356660479` reproduced removal of the explicit
+worker policy. Backend repair commit
+`bc48240f9ad4840656a6b181906e1b7e2ac9340a` retains it during that recognizable
+refresh while respecting explicit policy changes and removal.
+
+Qualified on Windows with the pinned Rust 1.99.1 toolchain:
+
+- The full `codex` CLI built successfully with `--locked`.
+- All 48 configuration-manager library tests passed, including the two new native
+  regression tests for retained policies and ordered batch edits.
+- All 14 private-backend API replay cases passed against both the built CLI and
+  a separately installed copy. They cover retained false/true policies, absent
+  policy, explicit edits, custom launchers and arguments, Windows and POSIX
+  command paths, unrelated servers, ordered set/clear, invalid-policy rejection,
+  and server deletion. Stale transport environment values were still removed.
+- The private MCP smoke test passed against both copies. The same mock parent
+  process identity survived a private refresh, and no disposable MCP remained.
+- Rust formatting, Python lint/format checks and Git whitespace checks passed.
+
+The Cargo test driver reached a conservative free-space guard after linking its
+library test executable. The two focused tests and all 48 configuration-manager
+tests were then run directly from that executable and passed. The interrupted
+Cargo invocation is not counted as a successful test command. Temporary build
+outputs were subsequently removed after the installed copy passed its checks.
+
+These checks used isolated configuration and synthetic fixtures. They made no
+model requests, started no chat workers, and made no real MCP calls. No active
+chat or MCP was restarted or reloaded. The new runtime was staged separately for
+a future normal desktop launch; live activation and new-worker enforcement of
+this follow-up remain unqualified. The earlier config/MCP library test counts
+above are historical results, not a rerun on this follow-up. Native execution on
+other operating systems and compatibility with changed future desktop refresh
+payloads remain outside this qualification.
+
 ## Live qualification on the test computer
 
-Live desktop activation is still pending. The source computer's active chats
-continued using its stock backend; software tests alone do not establish a live
-desktop rollout or explain every historical subprocess exit.
+At the original 2026-10-30 qualification, live desktop activation was pending and
+the source computer's active chats continued using its stock backend. The Node
+REPL refresh follow-up above also awaits its own live activation check. Software
+tests alone do not establish a live desktop rollout or explain every historical
+subprocess exit.
 
 1. Preserve that computer's backend and configuration. Build this branch's full
    `codex` CLI. The standalone `codex-app-server` executable is not interchangeable
